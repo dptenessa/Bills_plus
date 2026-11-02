@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Bills</h1><p class="sub">Review and filter bills by supplier.</p>
+<section class="card"><form method="get" action="/bills" class="row"><div><label>Supplier</label><select name="supplier"><option value="">All suppliers</option>{% for supplier in suppliers %}<option value="{{ supplier.id }}" {% if selected == supplier.id %}selected{% endif %}>{{ supplier.oib or 'No OIB' }} · {{ supplier.name }}</option>{% endfor %}</select></div><div><button>Filter bills</button> <a class="button" href="/suppliers">Supplier list</a></div></form></section>
+<section class="card wide"><table><thead><tr><th>Supplier</th><th>Invoice</th><th>Date</th><th>Amount</th><th>Category</th><th>Cost center</th><th>Status</th></tr></thead><tbody>
+{% for bill in bills %}<tr><td><a href="/bill/{{ bill.id }}">{{ bill.supplier }}</a>{% if bill.unread %} <span class="unread-badge" title="Unread bill discussion messages">{{ bill.unread }} new</span>{% endif %}</td><td>{{ bill.invoice_number }}</td><td>{{ european_date(bill.invoice_date) }}</td><td>{{ european_amount(bill.amount) }} {{ bill.currency }}</td><td>{{ bill.category }}</td><td>{{ bill.cost_center }}</td><td><span class="status-pill status-{{ bill.status|lower|replace(' ','-') }}">{{ bill.status }}</span></td></tr>{% else %}<tr><td colspan="7">No bills.</td></tr>{% endfor %}
+</tbody></table></section>
+{% endblock %}

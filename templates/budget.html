@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+{% macro spending_link(value, category='', period=month) -%}
+<a href="{{ url_for('reports.budget_bills', year=year, month=period, currency=currency, version=version, category=category) }}" title="View the bills and payments behind this comparison">{{ european_amount(value) }}</a>
+{%- endmacro %}
+<h1>Budget alignment</h1>
+<p class="sub">Compare the monthly category plan with payments across all users' bills, including archived bills.</p>
+{% if error %}<div class="notice" role="alert">{{ error }}</div>{% endif %}
+{% if request.args.get('imported', '')|int > 0 %}<div class="notice" role="status">Saved {{ request.args.get('imported')|int }} monthly budget values.</div>{% endif %}
+<section class="card">
+  <form method="get" action="/budget" class="row">
+    <div><label for="budget-year">Accounting year (January–December)</label><input id="budget-year" name="year" type="number" min="2000" max="2099" value="{{ year }}" required></div>
+    <div><label for="budget-version">Compare against version</label><select id="budget-version" name="version">{% for name in versions %}<option {% if name == version %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+    <div><label for="budget-month">Month</label><select id="budget-month" name="month"><option value="0">Whole year</option>{% for number in range(1,13) %}<option value="{{ number }}" {% if month == number %}selected{% endif %}>{{ '%02d'|format(number) }}</option>{% endfor %}</select></div>
+    <div><label for="budget-currency">Currency</label><select id="budget-currency" name="currency">{% for code in currencies %}<option {% if code == currency %}selected{% endif %}>{{ code }}</option>{% endfor %}</select></div>
+    <div><button>Show comparison</button></div>
+  </form>
+  <p class="muted">Payments are assigned to their payment month and the bill's category. Bank allocations include partial payments and subtract supplier refunds. Bills marked paid without allocations use their payment date, or their paid status history date. Currencies are never combined or converted. Whole year includes all twelve planned months.</p>
+</section>
+<section class="card">
+  <h2>Upload a monthly plan</h2>
+  <p>Choose the accounting year and version, download the matching template, then fill it in and upload it. Accounting years run from January to December.</p>
+  <p class="muted">Use the <strong>Budget plan</strong> sheet with columns <strong>month</strong> (YYYY-MM), <strong>category</strong>, <strong>currency</strong>, and <strong>planned_amount</strong>. Use bill category names for matching; new categories are also accepted. Enter amounts as numbers with at most two decimal places, without formulas. The template includes the configured categories for all twelve months.</p>
+  <form method="post" action="/budget-upload" enctype="multipart/form-data">
+    {{ csrf_field }}
+    <div class="row">
+      <div><label for="upload-year">Accounting year</label><input id="upload-year" type="number" name="year" min="2000" max="2099" placeholder="e.g. 2026" required></div>
+      <div><label for="upload-version">Plan version</label><input id="upload-version" name="version" list="plan-versions" maxlength="32" placeholder="Budget, FCQ1, FCQ2, …" required><datalist id="plan-versions">{% for name in versions %}<option value="{{ name }}">{% endfor %}</datalist></div>
+      <div><button id="download-budget-template" type="button" class="secondary">Download matching Excel template</button></div>
+    </div>
+    <input type="hidden" name="month" value="{{ month }}"><input type="hidden" name="currency" value="{{ currency }}">
+    <label for="budget-file">Excel budget plan</label><input id="budget-file" type="file" name="budget_file" accept=".xlsx" required>
+    <p class="muted">The plan is shared by all users. Uploading updates only the chosen year and version. Other versions stay unchanged. Within that version, omitted entries stay unchanged; upload zero to clear an amount. Every month in the file must match the selected year.</p>
+    <button>Upload plan</button>
+  </form>
+</section>
+{% if undated %}<div class="notice">{{ undated }} paid bill(s) or payment record(s) have no usable payment date and cannot be included in monthly totals.</div>{% endif %}
+<div class="grid">
+  <section class="card"><div class="label">Planned · {{ currency }}</div><div class="metric">{{ european_amount(planned) }}</div></section>
+  <section class="card"><div class="label">Paid, net of supplier refunds · {{ currency }}</div><div class="metric">{{ spending_link(paid) }}</div></section>
+  <section class="card"><div class="label">Remaining · {{ currency }}</div><div class="metric {% if remaining < 0 %}budget-over{% endif %}">{{ european_amount(remaining) }}</div></section>
+</div>
+<section class="card wide">
+  <h2>Compare plan versions · {{ year }}{% if month %}-{{ '%02d'|format(month) }}{% endif %} · {{ currency }}</h2>
+  <table><thead><tr><th>Version</th><th>Planned</th><th>Paid</th><th>Remaining</th></tr></thead><tbody>
+  {% for row in version_comparisons %}<tr><td><a href="{{ url_for('reports.budget_alignment', year=year, month=month, currency=currency, version=row.version) }}">{{ row.version }}</a>{% if row.version == version %} (selected){% endif %}</td><td>{% if row.has_plan %}{{ european_amount(row.planned) }}{% else %}No plan uploaded{% endif %}</td><td><a href="{{ url_for('reports.budget_bills', year=year, month=month, currency=currency, version=row.version) }}">{{ european_amount(row.paid) }}</a></td><td>{% if row.has_plan %}<span class="{% if row.remaining < 0 %}budget-over{% endif %}">{{ european_amount(row.remaining) }}</span>{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+<section class="card wide">
+  <h2>Paid by category · {{ version }} · {{ year }}{% if month %}-{{ '%02d'|format(month) }}{% endif %} · {{ currency }}</h2>
+  <p class="muted">Click a category or amount to see the bills and payments behind it.</p>
+  <table>
+    <thead><tr><th>Category</th><th>Planned</th><th>Paid</th><th>Remaining</th><th>Budget used</th></tr></thead>
+    <tbody>{% for row in categories %}
+      <tr><td><a href="{{ url_for('reports.budget_bills', year=year, month=month, currency=currency, version=version, category=row.category) }}">{{ row.category }}</a></td><td>{{ spending_link(row.planned, row.category) }}</td><td>{{ spending_link(row.paid, row.category) }}</td><td class="{% if row.remaining < 0 %}budget-over{% endif %}">{{ european_amount(row.remaining) }}</td>
+      <td>{% if row.percent is not none %}{{ european_amount(row.percent) }}%{% elif row.has_plan %}Zero budget{% else %}No plan{% endif %}{% if row.remaining < 0 %} · Over budget{% endif %}</td></tr>
+    {% else %}<tr><td colspan="5" class="muted">No plan or payments for this period and currency. Upload a plan to start comparing.</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><th>Total</th><th>{{ european_amount(planned) }}</th><th>{{ spending_link(paid) }}</th><th>{{ european_amount(remaining) }}</th><th>{{ currency }}</th></tr></tfoot>
+  </table>
+</section>
+<section class="card wide">
+  <h2>Monthly detail · {{ version }} · {{ currency }}</h2>
+  <table>
+    <thead><tr><th>Month</th><th>Category</th><th>Planned</th><th>Paid</th><th>Remaining</th><th>Situation</th></tr></thead>
+    <tbody>{% for row in monthly %}<tr><td>{{ year }}-{{ '%02d'|format(row.month) }}</td><td><a href="{{ url_for('reports.budget_bills', year=year, month=row.month, currency=currency, version=version, category=row.category) }}">{{ row.category }}</a></td><td>{{ spending_link(row.planned, row.category, row.month) }}</td><td>{{ spending_link(row.paid, row.category, row.month) }}</td><td class="{% if row.remaining < 0 %}budget-over{% endif %}">{{ european_amount(row.remaining) }}</td><td>{% if not row.has_plan %}No plan{% elif row.remaining < 0 %}Over budget{% else %}Within budget{% endif %}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No monthly values for this selection.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+<script>
+document.getElementById('download-budget-template').addEventListener('click', function () {
+  const year = document.getElementById('upload-year');
+  const version = document.getElementById('upload-version');
+  if (!year.reportValidity() || !version.reportValidity()) return;
+  location.assign('/budget-template.xlsx?' + new URLSearchParams({year: year.value, version: version.value}));
+});
+</script>
+{% endblock %}

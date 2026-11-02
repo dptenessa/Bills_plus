@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>User and approval settings</h1>
+<p class="sub">Bills over €150 using an approval route wait for a different user to approve them.</p>
+{% if invite_url %}<div class="notice"><strong>Invitation link created</strong><p>Copy and share the link. It expires in seven days and assigns the selected role.</p><input readonly onfocus="this.select()" value="{{ invite_url }}"></div>{% endif %}
+{% if message %}<div class="notice">{{ message }}</div>{% endif %}
+{% if reset_url %}<div class="notice"><strong>Password reset link created</strong><p>Share this link privately with the user after confirming their identity. It expires in 30 minutes, works once, and replaces earlier reset links. The user chooses their own password.</p><input aria-label="Password reset link" readonly onfocus="this.select()" value="{{ reset_url }}"></div>{% endif %}
+<section class="card"><h2>Invite a user</h2><p class="muted">Choose a role, create a one-time invite link, then share it. The person creates their own username and password.</p>
+  <form action="/invites" method="post" class="row">{{ csrf_field }}
+    <div><label>Role</label><select name="role"><option value="submitter">Submitter</option><option value="validator">Validator</option><option value="admin">Administrator</option></select></div>
+    <div><button>Create invite link</button></div>
+  </form>
+</section>
+<section class="card wide"><h2>Active invitations</h2><table><thead><tr><th>Role</th><th>Invited by</th><th>Expires</th><th>Action</th></tr></thead><tbody>
+{% for invite in invitations %}<tr><td>{{ invite.role }}</td><td>{{ invite.inviter or 'Admin' }}</td><td>{{ invite.expires_at[:16] }}</td><td><form action="/invites/revoke" method="post">{{ csrf_field }}<input type="hidden" name="invite_id" value="{{ invite.id }}"><button class="secondary">Revoke</button></form></td></tr>{% else %}<tr><td colspan="4" class="muted">No active invitations.</td></tr>{% endfor %}
+</tbody></table></section>
+<section class="card wide"><h2>Current users</h2><p class="muted">Disabled users cannot sign in. Their bills and approval history are retained.</p><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Added</th><th>Manage</th><th>Reset password</th></tr></thead><tbody>
+{% for user in users %}<tr><td>{{ user.username }}</td><td>{{ user.role }}</td><td>{{ 'Active' if user.active else 'Disabled' }}</td><td>{{ european_date(user.created_at) }}</td><td><div class="user-management-actions"><form action="/users/manage" method="post" class="user-role-form">{{ csrf_field }}<input type="hidden" name="user_id" value="{{ user.id }}"><select name="role" aria-label="Role for {{ user.username }}"><option value="submitter" {% if user.role == 'submitter' %}selected{% endif %}>Submitter</option><option value="validator" {% if user.role == 'validator' %}selected{% endif %}>Validator</option><option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Administrator</option></select><button class="secondary">Save role</button></form><form action="/users/manage" method="post" class="user-status-form" {% if user.active %}onsubmit="return confirm('Disable this account? The user will be signed out.');"{% endif %}>{{ csrf_field }}<input type="hidden" name="user_id" value="{{ user.id }}"><input type="hidden" name="role" value="{{ user.role }}"><input type="hidden" name="active" value="{{ 0 if user.active else 1 }}">{% if user.active %}<button class="icon-button user-disable-button" title="Disable {{ user.username }}" aria-label="Disable {{ user.username }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button>{% else %}<button class="secondary">Enable</button>{% endif %}</form></div></td><td><form action="/users/reset-password" method="post" class="user-password-form">{{ csrf_field }}<input type="hidden" name="user_id" value="{{ user.id }}"><input type="password" name="password" minlength="12" autocomplete="new-password" placeholder="Temporary password" required><button class="secondary">Set password</button></form></td></tr>{% else %}<tr><td colspan="6">No users yet.</td></tr>{% endfor %}
+</tbody></table></section>
+<section class="card">
+  <h2>Create a password reset link</h2>
+  <p class="muted">For a user who forgot their password, create a link and share it privately. No email is sent by this application.</p>
+  <form action="/users/password-reset-link" method="post" class="row">{{ csrf_field }}
+    <div><label for="reset-user">User</label><select id="reset-user" name="user_id" required>{% for user in users if user.active %}<option value="{{ user.id }}">{{ user.username }}</option>{% endfor %}</select></div>
+    <div><button>Create single-use reset link</button></div>
+  </form>
+</section>
+{% endblock %}

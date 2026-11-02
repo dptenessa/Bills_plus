@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Bill #{{ bill.id }} · {{ bill.supplier }}</h1>
+<p class="sub">Read-only bill detail from the budget comparison.</p>
+<p><a class="button secondary" href="{{ url_for('reports.budget_bills', year=year, month=month, currency=currency, version=version, category=category) }}">Back to underlying bills</a>
+<a class="button secondary" href="/bill/{{ bill.id }}">Open bill workflow</a></p>
+<section class="card">
+  <dl>
+    <dt>Supplier</dt><dd>{{ bill.supplier }}</dd>
+    <dt>Invoice number</dt><dd>{{ bill.invoice_number or '—' }}</dd>
+    <dt>Invoice date</dt><dd>{{ european_date(bill.invoice_date) or '—' }}</dd>
+    <dt>Due date</dt><dd>{{ european_date(bill.due_date) or '—' }}</dd>
+    <dt>Bill amount</dt><dd>{{ european_amount(bill.amount) }} {{ bill.currency }}</dd>
+    <dt>Category / cost center</dt><dd>{{ bill.category or 'Uncategorized' }} / {{ bill.cost_center or '—' }}</dd>
+    <dt>Description</dt><dd>{{ bill.description or '—' }}</dd>
+    <dt>Document type</dt><dd>{{ bill.document_type or '—' }}</dd>
+    <dt>Current status</dt><dd>{{ bill.status }}</dd>
+  </dl>
+</section>
+<section class="card wide">
+  <h2>Payments included in this selection · {{ year }}{% if month %}-{{ '%02d'|format(month) }}{% endif %} · {{ currency }}</h2>
+  <table><thead><tr><th>Payment date</th><th>Source</th><th>Amount included</th></tr></thead><tbody>
+  {% for row in payments %}<tr><td>{{ european_date(row.paid_date) }}</td><td>{{ row.source }}{% if row.transaction_id %} #{{ row.transaction_id }}{% endif %}</td><td>{{ european_amount(row.amount) }} {{ row.currency }}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">This bill has no payments in the selected period and currency.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

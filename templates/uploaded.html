@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Upload complete</h1><p class="sub">Processed {{ results|length }} document(s); {{ duplicate_count }} previously recorded bill(s) were skipped using supplier and invoice number.</p>
+<section class="card wide"><table><thead><tr><th>Review / existing bill</th><th>Supplier</th><th>Document number</th><th>Amount</th><th>Status</th></tr></thead><tbody>
+{% for item in results %}<tr><td>{% if item.duplicate and item.bill.status in ('Deleted','Void') %}<a href="/archive?status={{ item.bill.status }}">Already recorded · open existing record #{{ item.bill.id }}</a>{% else %}<a href="/bill/{{ item.bill.id }}">{{ 'Already recorded · open bill' if item.duplicate else 'Choose type and review' }} #{{ item.bill.id }}</a>{% endif %}</td><td>{{ item.bill.supplier or 'Supplier not identified' }}</td><td>{{ item.bill.invoice_number }}</td><td>{{ european_amount(item.bill.amount) }} {{ item.bill.currency }}</td><td>{% if item.duplicate %}Duplicate skipped{% else %}<span class="status-pill status-needs-review">{{ item.bill.status }}</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></section><p><a class="button" href="/">Upload more bills</a></p>
+{% endblock %}

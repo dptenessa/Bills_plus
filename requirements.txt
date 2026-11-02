@@ -1,0 +1,11 @@
+# Flask application and WSGI deployment.
+Flask>=3.0,<4
+# Required for scanned PDF rendering/text extraction when Poppler tools are absent.
+PyMuPDF>=1.24,<2
+# Local PDF417/HUB-3 payment barcode decoding.
+zxing-cpp>=3.0
+# Local PDF page/image conversion for PDF417 barcode scanning.
+Pillow>=10,<13
+# Excel statement import, including legacy XLS BIFF files through xlrd.
+xlrd>=2.0,<3
+openpyxl>=3.1,<4

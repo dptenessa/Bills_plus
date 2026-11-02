@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Set up the expense pilot</h1>
+<p class="sub">Create the first administrator account. Passwords are stored as salted hashes on this computer.</p>
+{% if message %}<div class="notice">{{ message }}</div>{% endif %}
+<section class="card"><form action="/setup" method="post" class="row">
+  <div><label>Username</label><input name="username" value="{{ username }}" required autocomplete="username" minlength="2" maxlength="80"></div>
+  <div><label>Password (at least 12 characters)</label><input type="password" name="password" minlength="12" required autocomplete="new-password"></div>
+  <div><label>Repeat password</label><input type="password" name="confirm" minlength="12" required autocomplete="new-password"></div>
+  <div><button>Create administrator</button></div>
+</form></section>
+{% endblock %}

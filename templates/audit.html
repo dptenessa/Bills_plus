@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Audit log</h1><p class="sub">Recent uploads, bill decisions, approvals, and reconciliation actions, attributed to named accounts.</p>
+<section class="card wide"><table><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Details</th></tr></thead><tbody>
+{% for row in rows %}<tr><td>{{ row.occurred_at }}</td><td>{{ row.username }}</td><td>{{ row.action }}</td><td>{{ row.entity_type }} {{ row.entity_id }}</td><td>{{ row.details }}</td></tr>{% else %}<tr><td colspan="5">No activity recorded.</td></tr>{% endfor %}
+</tbody></table></section>
+{% endblock %}

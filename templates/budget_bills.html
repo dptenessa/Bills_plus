@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Bills behind budget spending</h1>
+<p class="sub">{{ category or 'All categories' }} · {{ year }}{% if month %}-{{ '%02d'|format(month) }}{% else %} (January–December){% endif %} · {{ currency }} · {{ version }}</p>
+<p><a class="button secondary" href="{{ url_for('reports.budget_alignment', year=year, month=month, currency=currency, version=version) }}">Back to budget comparison</a></p>
+<section class="card">
+  <p>Planned: <strong>{{ european_amount(detail_planned) }} {{ currency }}</strong> · Paid, net of refunds: <strong>{{ european_amount(detail_paid) }} {{ currency }}</strong></p>
+  <p class="muted">Each row is the payment or refund contributing to this amount. Partial payments use their actual payment dates; a bill can appear more than once. Click a bill to see its details. Plan versions share the same actual payments.</p>
+</section>
+<section class="card wide">
+  <table><thead><tr><th>Payment date</th><th>Bill / supplier</th><th>Invoice</th><th>Category</th><th>Bill total</th><th>Status</th><th>Payment source</th><th>Amount included</th></tr></thead>
+  <tbody>{% for row in payments %}<tr>
+    <td>{{ european_date(row.paid_date) }}</td>
+    <td><a href="{{ url_for('reports.budget_bill_detail', bill_id=row.bill_id, year=year, month=month, currency=currency, version=version, category=category) }}">#{{ row.bill_id }} · {{ row.supplier or 'Unnamed supplier' }}</a></td>
+    <td>{{ row.invoice_number }}</td><td>{{ row.category }}</td><td>{{ european_amount(row.bill_amount) }} {{ row.bill_currency }}</td><td>{{ row.status }}</td>
+    <td>{{ row.source }}{% if row.transaction_id %} #{{ row.transaction_id }}{% endif %}</td><td>{{ european_amount(row.amount) }} {{ row.currency }}</td>
+  </tr>{% else %}<tr><td colspan="8" class="muted">No bill payments for this selection. Planned amounts may exist before any bills have been paid.</td></tr>{% endfor %}</tbody>
+  <tfoot><tr><th colspan="7">Total included</th><th>{{ european_amount(detail_paid) }} {{ currency }}</th></tr></tfoot></table>
+</section>
+{% endblock %}

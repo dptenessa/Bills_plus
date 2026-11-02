@@ -1,0 +1,12 @@
+<section class="validator-totals" aria-label="Current bank situation and pipeline forecast">
+{% for item in bank_situation %}
+  <article class="card validator-total-card">
+    <h2>Current bank situation · {{ item.currency }}</h2>
+    <div class="label">Latest imported account balance</div>
+    <div class="validator-net">{% if item.balance is not none %}{{ european_amount(item.balance) }} {{ item.currency }}{% else %}Balance unavailable{% endif %}</div>
+    {% for snapshot in item.snapshots %}<p class="muted">{{ snapshot.account_name }} · {{ european_date(snapshot.as_of_date) }} · {{ european_amount(snapshot.closing_balance) }} {{ item.currency }}</p>{% endfor %}
+    <div class="projected-total"><strong>Forecast after all pipeline payments</strong><span>{% if item.forecast is not none %}{{ european_amount(item.forecast) }} {{ item.currency }}{% else %}Upload a statement with its closing balance{% endif %}</span><small>{{ european_amount(item.pipeline) }} {{ item.currency }} outstanding in the payment pipeline</small></div>
+  </article>
+{% else %}<article class="card muted">No account balance or pipeline payments yet.</article>{% endfor %}
+</section>
+<p class="muted">Forecast includes bills to review, pending approvals, ready payments, and issued payment orders, less payments already matched. It includes future and undated bills across all statements. Balances are as of the dates shown; currencies remain separate.</p>

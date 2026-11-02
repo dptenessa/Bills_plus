@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="login-panel">
+<div class="login-branding"><div class="login-brand-name">Expense pilot</div><div class="login-powered">Powered by <strong>T-Travel</strong></div></div>
+<h1>Sign in</h1>
+{% if message %}<div class="notice">{{ message }}</div>{% endif %}
+{% if setup_available %}<p><a href="/setup">Create the first administrator</a></p>{% endif %}
+<section class="card"><form action="/login" method="post" class="row compact-grid">
+  {{ csrf_field }}
+  <div><label>Username</label><input name="username" required autocomplete="username"></div>
+  <div><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>
+  <div><button>Sign in</button></div>
+</form><p class="login-forgot"><a href="/forgot-password">Forgot your password?</a></p></section>
+</section>
+{% endblock %}

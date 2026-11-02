@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Suppliers</h1><p class="sub">Supplier entries are created from extracted bills and let you filter the bill register.</p>
+<section class="card wide"><table><thead><tr><th>Supplier · OIB</th><th>IBAN</th><th>Bills</th><th>Recorded total</th></tr></thead><tbody>
+{% for supplier in suppliers %}<tr><td><a href="/bills?supplier={{ supplier.id }}">{{ supplier.name }} · {{ supplier.oib or 'No OIB' }}</a></td><td>{{ supplier.iban }}</td><td>{{ supplier.bill_count }}</td><td>{{ european_amount(supplier.total) }} EUR</td></tr>{% else %}<tr><td colspan="4">No suppliers yet. Supplier records are created from uploaded bills.</td></tr>{% endfor %}
+</tbody></table></section>
+{% endblock %}

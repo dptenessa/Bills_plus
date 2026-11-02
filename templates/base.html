@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="hr-HR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=14">
+</head>
+<body>
+  <header class="site-header{% if not current_user and request.endpoint == 'auth.login' %} login-header{% endif %}">
+    <a class="brand" href="/">Expense pilot <span>· local</span></a>
+    <div class="header-right">
+      {% if current_user %}
+      <nav aria-label="Main navigation">
+        {% for item in nav_items %}
+        {% if item.separator %}<span class="nav-separator" aria-hidden="true"></span>{% else %}
+        <a href="{{ item.href }}"{% if item.href == '/wall' %} class="wall-nav"{% endif %}>{{ item.label }}{% if item.href == '/wall' %}<span class="nav-badge" data-unread-notes aria-live="polite" {% if not item.badge %}hidden{% endif %}>{{ item.badge or 0 }}</span>{% elif item.badge %}<span class="nav-badge">{{ item.badge }}</span>{% endif %}</a>
+        {% endif %}
+        {% endfor %}
+      </nav>
+      <div class="account"><span>Signed in as <strong>{{ current_user.username }}</strong><small>{{ current_user.role|title }}</small></span>
+        <a class="button secondary" href="/change-password">Change password</a>
+        <form action="/logout" method="post">{{ csrf_field }}<button class="secondary">Sign out / switch user</button></form>
+      </div>
+      {% else %}<a class="signin-link" href="/login">Sign in</a>{% endif %}
+    </div>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  {% if current_user %}<script>
+  (() => {
+    let loading = false;
+    async function refreshUnread() {
+      if (document.hidden || loading) return;
+      loading = true;
+      try {
+        const response = await fetch('/notifications', {cache: 'no-store', headers: {Accept: 'application/json'}});
+        if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return;
+        const counts = await response.json();
+        document.querySelectorAll('[data-unread-notes]').forEach(badge => {
+          badge.textContent = counts.notes;
+          badge.hidden = !counts.notes;
+          badge.setAttribute('aria-label', counts.notes + ' unread bill messages');
+        });
+      } catch (_) { /* Keep the last known count if the connection is interrupted. */ }
+      finally { loading = false; }
+    }
+    setInterval(refreshUnread, 30000);
+    window.addEventListener('focus', refreshUnread);
+    document.addEventListener('visibilitychange', refreshUnread);
+  })();
+  </script>{% endif %}
+</body>
+</html>
+

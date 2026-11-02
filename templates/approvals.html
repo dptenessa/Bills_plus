@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Validator inbox</h1>
+<p class="sub">Review the bill, choose one outcome, then proceed. You cannot approve a bill you submitted. Use each bill’s discussion below; notes also appear on the <a href="/wall">Wall</a>.</p>
+<section class="validator-list">
+{% for card in cards %}
+<article class="card validator-card">
+  <div class="validator-summary">
+    <div><h2>#{{ card.bill.id }} · {{ card.bill.supplier }}</h2>
+      <p>{{ card.bill.invoice_number }} · Due {{ european_date(card.bill.due_date) or 'date not entered' }}</p>
+      <p class="muted">{{ card.reason }} · Submitted by {{ card.bill.creator or 'Unknown' }}</p>
+    </div>
+    <div class="validator-amount">{{ european_amount(card.bill.amount) }} {{ card.bill.currency }}</div>
+  </div>
+  <div class="validator-controls">
+    <div class="validator-document-control"><span class="validator-control-title">Document</span>{% if card.bill.has_document %}<button type="button" class="secondary document-open" data-document-url="/file/{{ card.bill.id }}" data-document-name="{{ card.bill.original_name }}" data-document-kind="{{ card.preview_kind }}">View document</button>{% else %}<span class="no-validator-document">No document attached</span>{% endif %}</div>
+    {% if card.can_decide %}
+    <form action="/approval" method="post" class="validator-decision-form" data-validator-form>
+      {{ csrf_field }}<input type="hidden" name="bill_id" value="{{ card.bill.id }}">
+      <div><label for="decision-{{ card.bill.id }}">Decision</label>
+        <select id="decision-{{ card.bill.id }}" name="decision" required data-decision>
+          <option value="">Select an option…</option>
+          <option value="pay_now">Approve · pay now</option>
+          <option value="pay_due" {% if not card.bill.due_date %}disabled{% endif %}>Approve · pay at due date{% if not card.bill.due_date %} (due date missing){% endif %}</option>
+          <option value="pay_date">Approve · pay on a chosen date</option>
+          <option value="reject">Reject</option>
+        </select>
+      </div>
+      <div class="decision-extra" data-date-field hidden>
+        <label for="pay-date-{{ card.bill.id }}">Payment date</label>
+        <input id="pay-date-{{ card.bill.id }}" type="date" name="pay_date" min="{{ today }}" data-required-when-visible>
+      </div>
+      <div class="decision-extra" data-reason-field hidden>
+        <label for="reason-{{ card.bill.id }}">Reason for rejection</label>
+        <textarea id="reason-{{ card.bill.id }}" name="reason" maxlength="1000" data-required-when-visible></textarea>
+      </div>
+      <button type="submit">Proceed</button>
+    </form>
+    {% else %}<span class="muted">You submitted this bill; another validator must decide.</span>{% endif %}
+  </div>
+  <section class="validator-discussion" id="bill-{{ card.bill.id }}" aria-label="Bill discussion">
+    <div class="validator-discussion-heading">Bill discussion{% if card.unread %}<span class="unread-badge">{{ card.unread }} new</span>{% endif %}</div>
+    <div class="validator-thread">
+      {% for note in card.discussion.comments %}<article class="validator-note"><div><strong>{{ note.author_name }}</strong><time>{{ note.created_at|replace('T',' ') }}</time></div><p>{{ note.message }}</p></article>{% else %}<p class="muted validator-no-notes">No messages yet.</p>{% endfor %}
+      <form action="/bill-comment" method="post">{{ csrf_field }}<input type="hidden" name="bill_id" value="{{ card.bill.id }}"><input type="hidden" name="return_to" value="/approvals#bill-{{ card.bill.id }}"><label class="visually-hidden" for="bill-note-{{ card.bill.id }}">Add to this bill’s discussion</label><textarea id="bill-note-{{ card.bill.id }}" name="message" maxlength="4000" rows="1" placeholder="Add a note to this bill…" required></textarea><button class="secondary">Post</button></form>
+    </div>
+  </section>
+</article>
+{% else %}<section class="card muted">No bills are waiting for approval.</section>{% endfor %}
+</section>
+
+<div class="document-backdrop" aria-hidden="true" data-document-close hidden></div>
+<aside class="document-drawer" role="dialog" aria-modal="true" aria-labelledby="document-title" hidden>
+  <header class="document-drawer-header"><div><h2 id="document-title">Bill document</h2><a data-document-download href="#" target="_blank" rel="noopener">Open in new tab</a></div>
+    <button type="button" class="secondary" aria-label="Close document preview" data-document-close>Close</button></header>
+  <div class="document-viewer" data-document-viewer></div>
+</aside>
+
+<script>
+const drawer=document.querySelector('.document-drawer');
+const backdrop=document.querySelector('.document-backdrop');
+const viewer=document.querySelector('[data-document-viewer]');
+const docTitle=document.getElementById('document-title');
+const download=document.querySelector('[data-document-download]');
+function closeDocument(){drawer.hidden=true;backdrop.hidden=true;viewer.replaceChildren();}
+document.querySelectorAll('.document-open').forEach(button=>button.addEventListener('click',()=>{
+  const url=button.dataset.documentUrl;
+  docTitle.textContent=button.dataset.documentName||'Bill document';download.href=url;viewer.replaceChildren();
+  if(button.dataset.documentKind==='pdf'){
+    const frame=document.createElement('iframe');frame.src=url+'#zoom=page-width';frame.title=docTitle.textContent;viewer.append(frame);
+  }else if(button.dataset.documentKind==='image'){
+    const image=document.createElement('img');image.src=url;image.alt=docTitle.textContent;viewer.append(image);
+  }else{
+    const message=document.createElement('p');message.textContent='Preview is not available for this file type. Open it in a new tab to view it.';viewer.append(message);
+  }
+  drawer.hidden=false;backdrop.hidden=false;drawer.querySelector('[data-document-close]').focus();
+}));
+let opener=null;
+document.querySelectorAll('.document-open').forEach(button=>button.addEventListener('click',()=>{opener=button;}));
+document.querySelectorAll('[data-document-close]').forEach(button=>button.addEventListener('click',()=>{closeDocument();if(opener)opener.focus();}));
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!drawer.hidden){closeDocument();if(opener)opener.focus();}});
+document.querySelectorAll('[data-validator-form]').forEach(form=>{
+  const select=form.querySelector('[data-decision]');
+  const dateField=form.querySelector('[data-date-field]');
+  const reasonField=form.querySelector('[data-reason-field]');
+  function updateFields(){
+    const showDate=select.value==='pay_date';const showReason=select.value==='reject';
+    dateField.hidden=!showDate;reasonField.hidden=!showReason;
+    form.classList.toggle('needs-extra',showDate||showReason);
+    dateField.querySelector('input').required=showDate;
+    reasonField.querySelector('textarea').required=showReason;
+  }
+  select.addEventListener('change',updateFields);updateFields();
+});
+if(location.hash.startsWith('#bill-')){
+  const discussion=document.getElementById(location.hash.slice(1));
+  if(discussion)discussion.scrollIntoView({block:'center'});
+}
+</script>
+{% endblock %}

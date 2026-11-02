@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Bill and cash report</h1>
+<p class="sub">Bills dated {{ start }} to {{ end }} · each status is reconstructed as of the end date. Currency totals are kept separate.</p>
+{% if message %}<div class="notice">{{ message }}</div>{% endif %}
+{% if error %}<div class="notice error-notice">{{ error }}</div>{% endif %}
+
+<section class="card">
+  <h2>Upload historical bill records</h2>
+  <p class="muted">Download the Excel template, add one bill per row, and include the known status dates to rebuild its workflow timeline. Existing supplier and invoice number pairs are skipped.</p>
+  <p class="muted">The workbook includes dropdowns for status and document type, plus date and amount validation. Enter the date each status took effect; earlier transition dates are optional if you do not know them. You can enter a date and time when available.</p>
+  <p class="muted">Document type may be invoice, minimax_invoice, credit_card_charge, offer, or refund; leave it blank for invoice. Amounts can be entered as normal Excel numbers.</p>
+  <div class="history-import-actions"><a class="button secondary" href="/history-template.xlsx">Download Excel template</a>
+    <form action="/history-upload" method="post" enctype="multipart/form-data" class="history-import-form">{{ csrf_field }}
+      <div><label for="history-file">Historical Excel file</label><input id="history-file" type="file" name="history_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></div>
+      <button>Upload history</button>
+    </form>
+  </div>
+</section>
+
+<section class="card">
+  <form method="get" action="/report" class="row">
+    <div><label>From</label><input type="date" name="from" value="{{ start }}" required></div>
+    <div><label>To / status as of</label><input type="date" name="to" value="{{ end }}" required></div>
+    <div><button>Show report</button></div>
+  </form>
+</section>
+
+<section class="grid">
+  <div class="card"><div class="label">Closed (paid or rejected, including solved)</div><div class="metric">{{ summary.closed }}</div></div>
+  <div class="card"><div class="label">Pending · not overdue</div><div class="metric">{{ summary.pending_not_due }}</div></div>
+  <div class="card"><div class="label">Pending · overdue</div><div class="metric">{{ summary.pending_overdue }}</div></div>
+  <div class="card"><div class="label">Ready for payment</div><div class="metric">{{ summary.ready }}</div></div>
+  <div class="card"><div class="label">Order of payment issued</div><div class="metric">{{ summary.order_issue }}</div></div>
+  <div class="card"><div class="label">Paid at bank</div><div class="metric">{{ summary.paid }}</div></div>
+  <div class="card"><div class="label">Rejected (including solved)</div><div class="metric">{{ summary.rejected }}</div></div>
+</section>
+
+<section class="card">
+  <h2>Estimated balance after approved payments</h2>
+  <p class="muted">Forecast = latest statement balance on or before {{ end }} minus unpaid bills that are ready for payment or in payment processing. This is a simple projection; it does not include future income or operating costs.</p>
+  {% if forecasts %}<div class="wide"><table><thead><tr><th>Currency</th><th>Latest statement balance</th><th>Balance date</th><th>Open approved payments</th><th>Estimated balance</th></tr></thead><tbody>
+  {% for item in forecasts %}<tr><td>{{ item.currency }}</td><td>{% if item.balance is not none %}{{ european_amount(item.balance) }}{% else %}No statement{% endif %}</td><td>{{ european_date(item.as_of_date) or '—' }}</td><td>{{ european_amount(item.obligations) }}</td><td>{% if item.forecast is not none %}<strong>{{ european_amount(item.forecast) }} {{ item.currency }}</strong>{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">No bills or bank balance are available for this period.</p>{% endif %}
+</section>
+
+<section class="card wide">
+  <div class="section-heading"><h2>Bill details</h2><a class="button" href="/report.csv?from={{ start }}&amp;to={{ end }}">Download CSV</a></div>
+  <table><thead><tr><th>Bill</th><th>Supplier</th><th>Invoice date</th><th>Due date</th><th>Amount</th><th>Status as of {{ end }}</th><th>Status changed</th></tr></thead><tbody>
+  {% for bill in bills %}<tr>
+    <td><a href="/bill/{{ bill.id }}">#{{ bill.id }}{% if bill.invoice_number %}<div>{{ bill.invoice_number }}</div>{% endif %}</a></td>
+    <td>{{ bill.supplier }}</td><td>{{ european_date(bill.invoice_date) or '—' }}</td><td>{{ european_date(bill.due_date) or '—' }}</td>
+    <td>{{ european_amount(bill.amount) }} {{ bill.currency }}</td>
+    <td><span class="status-pill status-{{ bill.status_at_end|lower|replace(' ','-') }}">{{ bill.status_at_end }}</span></td>
+    <td>{{ bill.status_at_end_at|replace('T',' ') }}</td>
+  </tr>{% else %}<tr><td colspan="7" class="muted">No bills in this date range.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}
+
+

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Archive</h1>
+<p class="sub">Paid bills, rejected bills, and resolved rejections appear here. Use the Deleted or Void status filter to permanently remove older cancelled records that were kept by previous versions.</p>
+{% if message %}<div class="notice">{{ message }}</div>{% endif %}
+<section class="card">
+  <h2>Situation of all bills</h2>
+  <p>Download bills from all users whose invoice date, payment order date, or bank payment date falls within the selected range. Leave both dates blank to include every bill.</p>
+  <form method="get" action="/bills-situation.xlsx" class="row compact-grid">
+    <div><label for="situation-from">From date</label><input id="situation-from" type="date" name="from"></div>
+    <div><label for="situation-to">To date</label><input id="situation-to" type="date" name="to"></div>
+    <div><button>Download all bills (Excel)</button></div>
+  </form>
+</section>
+<section class="card">
+  <form method="get" action="/archive" class="row compact-grid">
+    <div><label for="archive-from">From date</label><input id="archive-from" type="date" name="from" value="{{ start_date }}"></div>
+    <div><label for="archive-to">To date</label><input id="archive-to" type="date" name="to" value="{{ end_date }}"></div>
+    <div><label for="archive-supplier">Supplier / provider</label><input id="archive-supplier" type="search" name="supplier" value="{{ supplier_search }}" placeholder="Search supplier name"></div>
+    <div><label for="archive-status">Status</label><select id="archive-status" name="status"><option value="">All statuses</option><option value="Rejected" {% if status_filter == 'Rejected' %}selected{% endif %}>Rejected</option><option value="Solved" {% if status_filter == 'Solved' %}selected{% endif %}>Solved</option><option value="Paid at bank" {% if status_filter == 'Paid at bank' %}selected{% endif %}>Paid at bank</option><option value="Paid" {% if status_filter == 'Paid' %}selected{% endif %}>Paid</option><option value="Deleted" {% if status_filter == 'Deleted' %}selected{% endif %}>Deleted / cancelled</option><option value="Void" {% if status_filter == 'Void' %}selected{% endif %}>Void</option></select></div>
+    <div><label for="archive-min">Minimum amount</label><input id="archive-min" type="text" inputmode="decimal" name="min_amount" value="{{ min_amount }}" placeholder="0,00"></div>
+    <div><label for="archive-max">Maximum amount</label><input id="archive-max" type="text" inputmode="decimal" name="max_amount" value="{{ max_amount }}" placeholder="0,00"></div>
+    <div><button>Apply filters</button> <a class="button secondary" href="/archive">Clear</a></div>
+  </form>
+  <p class="muted">Dates use the bill's payment or decision date. Amount bounds apply to each bill in its original currency.</p>
+</section>
+<section class="card wide">
+  <h2>Archived bills</h2>
+  <table>
+    <thead><tr><th>Supplier</th><th>Invoice</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for bill in completed %}
+      <tr><td><a href="/bill/{{ bill.id }}">{{ bill.supplier }}</a></td><td>{{ bill.invoice_number }}</td>
+      <td>{{ european_date(bill.archive_date) }}</td><td>{{ european_amount(bill.amount) }} {{ bill.currency }}</td><td><span class="status-pill status-{{ bill.status|lower|replace(' ','-') }}">{{ bill.status }}</span></td>
+      <td>{% if bill.status in ('Paid at bank','Paid','Solved','Rejected','Deleted','Void') %}<form action="/bill-action" method="post" onsubmit="return confirm('Permanently delete this bill, its entire discussion thread, approvals, and any bill-to-bank matches? The bank transaction itself will remain unmatched. This cannot be undone.');">
+        {{ csrf_field }}<input type="hidden" name="id" value="{{ bill.id }}"><input type="hidden" name="action" value="permanent_delete"><button class="danger">Delete entire track</button>
+      </form>{% else %}<span class="muted">-</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No bills match these filters.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if total_pages > 1 %}<div class="transaction-pagination"><span class="muted">Page {{ page_number }} of {{ total_pages }} - {{ total_count }} bills</span><div>{% if previous_page_url %}<a class="button secondary" href="{{ previous_page_url }}">Previous</a>{% endif %}{% if next_page_url %}<a class="button secondary" href="{{ next_page_url }}">Next</a>{% endif %}</div></div>{% endif %}
+</section>
+{% if current_user %}
+<section class="card wide">
+  <h2>Manual records eligible for permanent deletion</h2>
+  <p class="muted">Manual “Just record” entries with no scan, approval, validation, payment, discussion, or bank match can also be erased permanently.</p>
+  <table>
+    <thead><tr><th>Supplier</th><th>Invoice</th><th>Amount</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for bill in deletable %}
+      <tr><td>{{ bill.supplier }}</td><td>{{ bill.invoice_number }}</td><td>{{ european_amount(bill.amount) }} {{ bill.currency }}</td>
+      <td><form action="/bill-action" method="post" onsubmit="return confirm('Permanently delete this bill and its entire track? This cannot be undone.');">
+        {{ csrf_field }}<input type="hidden" name="id" value="{{ bill.id }}"><input type="hidden" name="action" value="permanent_delete">
+        <button class="secondary">Delete permanently</button>
+      </form></td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No unprocessed manual records are eligible for deletion.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

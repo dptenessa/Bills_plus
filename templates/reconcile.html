@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Bank reconciliation</h1>
+{% include "_bank_forecast.html" %}
+<p class="sub">Match statement transactions to bills, or start from approved payment orders and find their bank transactions.</p>
+
+<div class="reconcile-mode-heading"><h2>Match transactions</h2><a class="button secondary" href="{{ overall_url }}">Overall statement</a></div>
+
+{% if period_gaps %}<section class="notice"><strong>Bank statement date gap detected</strong><p>The uploaded statements do not cover these dates. Check whether a statement is missing:</p><ul>{% for gap in period_gaps %}<li>{{ gap.account_ref }} ({{ gap.currency }}): {{ european_date(gap.start) }}–{{ european_date(gap.end) }}</li>{% endfor %}</ul></section>{% endif %}
+{% if untracked_statement_count %}<section class="notice"><strong>Date coverage cannot be verified for {{ untracked_statement_count }} imported statement(s)</strong><p>These are older uploads or files without a readable period in cell A2. For complete gap checks, use the XLS/XLSX export that includes its date range in A2.</p></section>{% endif %}
+
+<section class="card">
+  <h2>Upload bank statement</h2>
+  <p class="muted">CSV, XLS, or XLSX. For XLS/XLSX exports, the period in cell A2 is tracked and gaps between uploaded periods are flagged here. The importer recognizes Croatian and English transaction columns; duplicate entries are skipped.</p>
+  <form action="/statement" method="post" enctype="multipart/form-data" class="row">{{ csrf_field }}
+    <div><label>Statement file</label><input type="file" name="statement" accept=".csv,.xls,.xlsx,text/csv" required></div>
+    <div><label>Account name (optional)</label><input name="account_name" value="Main account"></div>
+    <div><button>Import statement</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <form method="get" action="/reconcile" class="row compact-grid">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <input type="hidden" name="view" value="matching">
+    {% if focus_bill_id %}<input type="hidden" name="bill_id" value="{{ focus_bill_id }}">{% endif %}
+    <div><label>Statement</label><select id="statement-filter" name="statement"><option value="__all__" {% if statement_filter == '__all__' %}selected{% endif %}>All statements</option>{% for name in statements %}<option value="{{ name }}" data-start="{{ statement_ranges[name].start if name in statement_ranges else '' }}" data-end="{{ statement_ranges[name].end if name in statement_ranges else '' }}" {% if name == selected_statement %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+    <div><label>From date</label><input type="date" name="from" value="{{ start_date }}"></div>
+    <div><label>To date</label><input type="date" name="to" value="{{ end_date }}"></div>
+    <div><label for="filter-search">Payer / payee</label><input id="filter-search" type="search" name="search" value="{{ search }}" placeholder="Name or description"></div>
+    <div><label for="filter-min-amount">Minimum amount</label><input id="filter-min-amount" type="text" inputmode="decimal" name="min_amount" value="{{ min_amount }}" placeholder="0,00"></div>
+    <div><label for="filter-max-amount">Maximum amount</label><input id="filter-max-amount" type="text" inputmode="decimal" name="max_amount" value="{{ max_amount }}" placeholder="0,00"></div>
+    <div><button class="secondary">Apply filters</button> <a class="button secondary" href="/reconcile?statement=__all__">All history</a></div>
+  </form>
+  <p class="muted">The latest imported statement is selected by default. Choose another statement or All history to review older activity. Search checks payer/payee and transaction details; amount bounds use the original currency.</p>
+</section>
+
+<script>document.getElementById('statement-filter').addEventListener('change',function(){const option=this.options[this.selectedIndex];this.form.elements['from'].value=option.dataset.start||'';this.form.elements['to'].value=option.dataset.end||'';});</script>
+
+<nav class="reconcile-tabs" aria-label="Matching options">
+  <a class="button {% if tab == 'orders' %}active{% endif %}" href="{{ orders_tab_url }}">Match from payment orders</a>
+  <a class="button {% if tab == 'statement' %}active{% endif %}" href="{{ statement_tab_url }}">Match from statement</a>
+</nav>
+
+{% if tab == 'statement' %}
+<section class="card wide">
+  <h2>Statement transactions{% if selected_statement %} · {{ selected_statement }}{% endif %}</h2>
+  <table><thead><tr><th>Date</th><th>Statement details</th><th>Amount</th><th>Match / classification</th></tr></thead><tbody>
+  {% for entry in entries %}
+    <tr>
+      <td>{{ entry.transaction.txn_date }}</td>
+      <td><span class="pill {{ 'ok' if entry.incoming else '' }}">{{ 'Incoming' if entry.incoming else 'Outgoing' }}</span>
+        <strong>{{ entry.transaction.counterparty or entry.transaction.description }}</strong>
+        {% if entry.transaction.counterparty and entry.transaction.description != entry.transaction.counterparty %}<div>{{ entry.transaction.description }}</div>{% endif %}
+        <div class="muted">{{ entry.transaction.reference }}</div>
+      </td>
+      <td>{{ european_amount(entry.transaction.amount) }} {{ entry.transaction.currency }}</td>
+      <td>
+        {% if entry.kind == 'allocated' %}
+          <span class="pill ok">Matched</span>
+          {% for allocation in entry.allocations %}<div><a href="/bill/{{ allocation.bill_id }}">Bill #{{ allocation.bill_id }} · {{ allocation.supplier }}</a> · {{ european_amount(allocation.amount) }} ({{ allocation.allocation_type|replace('_',' ') }})</div>{% endfor %}
+        {% elif entry.kind == 'classified' %}
+          <span class="pill ok">Classified as {{ entry.transaction.kind|replace('_',' ') }}</span>
+        {% else %}
+          {% for candidate in entry.candidates %}
+          <div class="payment-order-card">
+            <a href="/bill/{{ candidate.bill.id }}">#{{ candidate.bill.id }} · {{ candidate.bill.supplier }} · {{ candidate.bill.invoice_number }}</a>
+            <span>{{ european_amount(candidate.remaining) }} {{ candidate.bill.currency }}</span>
+            {% if candidate.reference_match %}<span class="pill ok">Reference matches</span>{% elif candidate.invoice_match %}<span class="pill ok">Invoice matches</span>{% else %}<span class="pill ok">Amount and supplier match</span>{% endif %}
+            {% if entry.transaction.amount <= candidate.remaining + 0.009 %}
+            <form action="/match" method="post">{{ csrf_field }}
+              <input type="hidden" name="txn_id" value="{{ entry.transaction.id }}"><input type="hidden" name="bill_ids" value="{{ candidate.bill.id }}">
+              <input type="hidden" name="view" value="matching"><input type="hidden" name="statement" value="{{ statement_filter }}"><input type="hidden" name="from" value="{{ start_date }}"><input type="hidden" name="to" value="{{ end_date }}"><input type="hidden" name="search" value="{{ search }}"><input type="hidden" name="page" value="{{ transaction_page }}">
+              <button>{{ 'Match refund' if entry.incoming else 'Confirm payment match' }}</button>
+            </form>{% endif %}
+          </div>
+          {% else %}<p class="muted">No confident match found.</p>{% endfor %}
+          <details><summary>Split payment or choose another bill</summary>
+            <form action="/match" method="post">{{ csrf_field }}
+              <input type="hidden" name="txn_id" value="{{ entry.transaction.id }}"><input type="hidden" name="statement" value="{{ statement_filter }}"><input type="hidden" name="tab" value="{{ tab }}"><input type="hidden" name="view" value="matching"><input type="hidden" name="from" value="{{ start_date }}"><input type="hidden" name="to" value="{{ end_date }}"><input type="hidden" name="search" value="{{ search }}"><input type="hidden" name="min_amount" value="{{ min_amount }}"><input type="hidden" name="max_amount" value="{{ max_amount }}"><input type="hidden" name="page" value="{{ transaction_page }}">
+              <div class="wide"><table><thead><tr><th>Select</th><th>Bill and match hints</th><th>Open amount</th><th>Allocate</th></tr></thead><tbody>
+              {% for candidate in entry.eligible_bills %}
+                <tr><td><input type="checkbox" name="bill_ids" value="{{ candidate.bill.id }}"></td>
+                  <td><a href="/bill/{{ candidate.bill.id }}">#{{ candidate.bill.id }} {{ candidate.bill.supplier }}</a> <span class="status-pill status-{{ candidate.bill.status|lower|replace(' ','-') }}">{{ candidate.bill.status }}</span>
+                    <div class="muted">Invoice {{ candidate.bill.invoice_number }} · due {{ european_date(candidate.bill.due_date) or 'date not entered' }}
+                      {% if candidate.reference_match %} · reference matches{% endif %}
+                      {% if candidate.amount_difference < 0.01 %} · exact amount{% else %} · amount difference {{ european_amount(candidate.amount_difference) }}{% endif %}
+                      {% if candidate.day_gap is not none %} · {{ candidate.day_gap }} day(s) from due/invoice date{% endif %}
+                      {% if candidate.name_score > 0 %} · payer name similarity {{ (candidate.name_score * 100)|round|int }}%{% endif %}
+                    </div>
+                  </td>
+                  <td>{{ european_amount(candidate.remaining) }} {{ candidate.bill.currency }}</td>
+                  <td><input type="text" inputmode="decimal" name="allocation_{{ candidate.bill.id }}" placeholder="0,00" style="min-width:95px"></td>
+                </tr>
+              {% else %}<tr><td colspan="4" class="muted">No eligible bills with an open amount in this currency. Check that an invoice is approved for payment.</td></tr>{% endfor %}
+              </tbody></table></div>
+              <p class="muted">Select one or more bills and allocate amounts totaling exactly {{ european_amount(entry.transaction.amount) }} {{ entry.transaction.currency }}. For one bill, leave the amount blank to allocate the full transaction.</p>
+              <button>{{ 'Match refund' if entry.incoming else 'Confirm payment match' }}</button>
+              {% if can_classify %}<button class="secondary" formaction="{{ entry.other_path }}" formmethod="post" name="txn_id" value="{{ entry.transaction.id }}">{{ entry.other_label }}</button>{% endif %}
+            </form>
+          </details>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="4">No statement transactions match these filters.</td></tr>{% endfor %}
+  </tbody></table>
+  {% if transaction_pages > 1 %}<div class="transaction-pagination"><span class="muted">Page {{ transaction_page }} of {{ transaction_pages }} · {{ transaction_count }} transactions</span><div>{% if previous_page_url %}<a class="button secondary" href="{{ previous_page_url }}">Previous</a>{% endif %}{% if next_page_url %}<a class="button secondary" href="{{ next_page_url }}">Next</a>{% endif %}</div></div>{% endif %}
+</section>
+{% else %}
+<section class="card wide">
+  <h2>{% if focus_bill_id %}Bank match for bill #{{ focus_bill_id }}{% else %}Payment orders awaiting bank confirmation{% endif %}</h2>
+  {% if focus_message %}<div class="notice">{{ focus_message }}</div>{% endif %}
+  <p class="muted">These bills are at “Order of payment issued”. Match each to an outgoing transaction. A bill turns green only after its full amount has been matched. For a bank transaction covering several bills, use “Match from statement”.</p>
+  {% for order in payment_orders %}
+  <article class="payment-order-card" id="payment-order-{{ order.bill.id }}">
+    <div class="section-heading"><div>
+      <h3><a href="/bill/{{ order.bill.id }}">Bill #{{ order.bill.id }} · {{ order.bill.supplier }}</a></h3>
+      <div><strong>Invoice {{ order.bill.invoice_number or 'not entered' }}</strong> · invoice date {{ european_date(order.bill.invoice_date) or 'not entered' }} · due {{ european_date(order.bill.due_date) or 'not entered' }} · scheduled {{ european_date(order.bill.scheduled_pay_date) or 'not set' }} · <span class="status-pill status-order-of-payment-issued">{{ order.bill.status }}</span></div>
+    </div><strong>Remaining: {{ european_amount(order.remaining) }} {{ order.bill.currency }}</strong></div>
+    <div class="payment-order-details">
+      {% if order.bill.document_type or order.bill.category %}<div><strong>Type / category:</strong> {{ order.bill.document_type or 'not set' }}{% if order.bill.category %} · {{ order.bill.category }}{% endif %}</div>{% endif %}
+      {% if order.bill.description %}<div><strong>Bill description:</strong> {{ order.bill.description }}</div>{% endif %}
+      {% if order.bill.decision_reason %}<div><strong>Approval reason:</strong> {{ order.bill.decision_reason }}</div>{% endif %}
+      {% if order.bill.payment_description or order.bill.payment_purpose or order.bill.payment_reference %}<div><strong>Payment details:</strong> {{ order.bill.payment_purpose }}{% if order.bill.payment_description %} · {{ order.bill.payment_description }}{% endif %}{% if order.bill.payment_reference %} · Reference {{ order.bill.payment_reference }}{% endif %}</div>{% endif %}
+    </div>
+    {% if order.candidates %}
+    <div class="wide"><table><thead><tr><th>Possible bank payment</th><th>Amount</th><th>Match clues</th><th>Action</th></tr></thead><tbody>
+      {% for candidate in order.candidates %}<tr>
+        <td>{{ candidate.transaction.txn_date }} · {{ candidate.transaction.counterparty or candidate.transaction.description }}<div class="muted">{{ candidate.transaction.description }}</div></td>
+        <td>{{ european_amount(candidate.transaction.amount) }} {{ candidate.transaction.currency }}</td>
+        <td>{% if candidate.reference_match %}<span class="pill ok">Reference matches</span>{% endif %}{% if candidate.amount_difference < 0.01 %}<span class="pill ok">Exact amount</span>{% else %}<span class="muted">Difference {{ european_amount(candidate.amount_difference) }}</span>{% endif %}{% if candidate.day_gap is not none %}<div class="muted">{{ candidate.day_gap }} day(s) from scheduled/due date</div>{% endif %}{% if candidate.name_score > 0 %}<div class="muted">Payer name similarity {{ (candidate.name_score * 100)|round|int }}%</div>{% endif %}</td>
+        <td><form action="/match" method="post" class="inline-match-form">{{ csrf_field }}
+          <input type="hidden" name="txn_id" value="{{ candidate.transaction.id }}"><input type="hidden" name="bill_ids" value="{{ order.bill.id }}"><input type="hidden" name="statement" value="{{ statement_filter }}"><input type="hidden" name="tab" value="orders"><input type="hidden" name="view" value="matching"><input type="hidden" name="from" value="{{ start_date }}"><input type="hidden" name="to" value="{{ end_date }}"><input type="hidden" name="bill_id" value="{{ focus_bill_id }}"><input type="hidden" name="search" value="{{ search }}"><input type="hidden" name="min_amount" value="{{ min_amount }}"><input type="hidden" name="max_amount" value="{{ max_amount }}"><input type="hidden" name="page" value="{{ transaction_page }}">
+          <input type="hidden" name="allocation_{{ order.bill.id }}" value="{{ european_amount(candidate.allocation_amount) }}">
+          <button>Match payment</button>
+        </form></td>
+      </tr>{% endfor %}
+    </tbody></table></div>
+    {% else %}<p class="muted">No unallocated outgoing transaction in the selected statement and date range looks suitable. Try another date range or the statement-first tab.</p>{% endif %}
+  </article>
+  {% else %}{% if not focus_bill_id %}<p class="muted">No bills are waiting for bank confirmation.</p>{% endif %}{% endfor %}
+  {% if transaction_pages > 1 %}<div class="transaction-pagination"><span class="muted">Page {{ transaction_page }} of {{ transaction_pages }} · {{ transaction_count }} transactions</span><div>{% if previous_page_url %}<a class="button secondary" href="{{ previous_page_url }}">Previous</a>{% endif %}{% if next_page_url %}<a class="button secondary" href="{{ next_page_url }}">Next</a>{% endif %}</div></div>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

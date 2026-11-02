@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Wall</h1>
+<p class="sub">All notes about bills you can access. Unread notes are marked; opening the bill marks messages from the other person as read for you.</p>
+<section class="wall-list">
+  {% for note in messages %}
+  <article class="card wall-message {% if note.unread %}wall-unread{% elif note.author_id == current_user.id %}wall-sent{% else %}wall-read{% endif %}">
+    <div class="wall-message-heading">
+      <div><strong>{{ note.author_name }}</strong><span class="muted"> · {{ note.created_at|replace('T',' ') }}</span></div>
+      {% if note.unread %}<span class="unread-badge">Unread</span>{% elif note.author_id == current_user.id %}<span class="read-badge">Sent</span>{% else %}<span class="read-badge">Read</span>{% endif %}
+    </div>
+    <p class="wall-text">{{ note.message }}</p>
+    <a href="/bill/{{ note.bill_id }}">{{ note.supplier }} · {{ note.invoice_number }} <span class="status-pill status-{{ note.status|lower|replace(' ','-') }}">{{ note.status }}</span> → Open bill</a>
+  </article>
+  {% else %}
+  <section class="card muted">No bill messages yet.</section>
+  {% endfor %}
+</section>
+{% endblock %}

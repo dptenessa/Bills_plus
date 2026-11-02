@@ -1,0 +1,18 @@
+{
+  "categories": [
+    "Utilities",
+    "Office supplies",
+    "Maintenance",
+    "Services",
+    "Travel",
+    "Other"
+  ],
+  "cost_centers": [
+    "General"
+  ],
+  "payer": {
+    "name": "",
+    "address": "",
+    "postal_city": ""
+  }
+}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Expense overview</h1><p class="sub">Capture bills, route approvals, and manage payments. Bank reconciliation is a separate step.</p>
+<div class="grid"><div class="card"><div class="label">Bills to review</div><div class="metric">{{ openb }}</div></div><div class="card"><div class="label">Unmatched bank entries</div><div class="metric">{{ unmatched }}</div></div><div class="card"><div class="label">Bills dated in last 7 days</div><div class="metric">{{ european_amount(spend) }} EUR</div></div><div class="card"><div class="label">Storage</div><div class="metric">Local SQLite</div></div></div>
+<p><a class="button" href="/payer">Submitter / payer dashboard</a> <a class="button" href="/manual-bill">Enter bill manually</a></p>
+<section class="card"><h2>Upload bills</h2><p class="muted">Select several files, choose a whole folder, or take a photo from your phone. PDFs and images are read locally; extracted details remain reviewable.</p>
+<form action="/upload" method="post" enctype="multipart/form-data">{{ csrf_field }}<div class="row">
+  <div><label>One or more bills</label><input type="file" name="documents" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.txt,image/*" multiple></div>
+  <div><label>Whole folder</label><input type="file" name="folder" webkitdirectory directory multiple></div>
+  <div><label>Take or choose a photo</label><input type="file" name="photo" accept="image/*" capture="environment"></div>
+  <div><label>Default category (optional)</label><select name="category"><option value="">Select…</option>{% for category in categories %}<option>{{ category }}</option>{% endfor %}</select></div>
+</div><button>Upload and extract</button></form></section>
+<section class="card wide"><h2>Bills in the pipeline</h2><p class="muted">Bills to review, pending approvals, approved payments, payment orders awaiting bank confirmation, and unresolved rejections.</p><table><thead><tr><th>Supplier</th><th>Invoice</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>
+{% for bill in bills %}<tr><td><a href="/bill/{{ bill.id }}">{{ bill.supplier or 'Unknown supplier' }}</a>{% if bill.unread %} <span class="unread-badge" title="Unread bill discussion messages">{{ bill.unread }} new</span>{% endif %}</td><td>{{ bill.invoice_number }}</td><td>{{ european_date(bill.invoice_date) }}</td><td>{{ european_amount(bill.amount) }} {{ bill.currency }}</td><td><span class="status-pill status-{{ bill.status|lower|replace(' ','-') }}">{{ bill.status }}</span></td></tr>{% else %}<tr><td colspan="5" class="muted">No bills in the pipeline.</td></tr>{% endfor %}
+</tbody></table></section>
+{% endblock %}

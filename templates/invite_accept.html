@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Join the expense pilot</h1>
+<p class="sub">This invitation assigns you the <strong>{{ role|title }}</strong> role. Choose a username and password to accept it.</p>
+{% if message %}<div class="notice">{{ message }}</div>{% endif %}
+<section class="card"><form action="/accept-invite" method="post" class="row">
+  {{ csrf_field }}<input type="hidden" name="invite_token" value="{{ invite_token }}">
+  <div><label>Username</label><input name="username" minlength="2" required autocomplete="username"></div>
+  <div><label>Password (at least 12 characters)</label><input type="password" name="password" minlength="12" required autocomplete="new-password"></div>
+  <div><label>Repeat password</label><input type="password" name="confirm" minlength="12" required autocomplete="new-password"></div>
+  <div><button>Accept invitation</button></div>
+</form></section>
+{% endblock %}

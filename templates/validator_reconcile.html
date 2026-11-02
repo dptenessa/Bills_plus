@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Bank reconciliation</h1>
+{% include "_bank_forecast.html" %}
+<p class="sub">Read-only overview of statement activity and approved payments.</p>
+<div class="reconcile-mode-heading"><h2>Overall statement</h2><a class="button secondary" href="{{ matching_url }}">Match transactions</a></div>
+
+<section class="card">
+  <form method="get" action="/reconcile" class="row compact-grid">
+    <input type="hidden" name="view" value="overall">
+    <div><label for="statement">Statement</label><select id="statement-filter" name="statement"><option value="__all__" {% if statement_filter == '__all__' %}selected{% endif %}>All statements</option>{% for name in statements %}<option value="{{ name }}" data-start="{{ statement_ranges[name].start if name in statement_ranges else '' }}" data-end="{{ statement_ranges[name].end if name in statement_ranges else '' }}" {% if name == selected_statement %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+    <div><label for="from-date">From</label><input id="from-date" type="date" name="from" value="{{ start_date }}"></div>
+    <div><label for="to-date">To</label><input id="to-date" type="date" name="to" value="{{ end_date }}"></div>
+    <div><label for="search">Payer / payee</label><input id="search" type="search" name="search" value="{{ search }}" placeholder="Name or description"></div>
+    <div><label for="min-amount">Minimum amount</label><input id="min-amount" type="text" inputmode="decimal" name="min_amount" value="{{ min_amount }}" placeholder="0,00"></div>
+    <div><label for="max-amount">Maximum amount</label><input id="max-amount" type="text" inputmode="decimal" name="max_amount" value="{{ max_amount }}" placeholder="0,00"></div>
+    <div><button>Apply filters</button> <a class="button secondary" href="/reconcile?view=overall">Latest statement</a> <a class="button secondary" href="/reconcile?statement=__all__&amp;view=overall">All history</a></div>
+  </form>
+  <p class="muted">Search checks the payer/payee and transaction description. Amount bounds apply to each item in its original currency. Totals cover all filtered results; the lists show 100 transactions per page.</p>
+</section>
+
+<script>document.getElementById('statement-filter').addEventListener('change',function(){const option=this.options[this.selectedIndex];this.form.elements['from'].value=option.dataset.start||'';this.form.elements['to'].value=option.dataset.end||'';});</script>
+
+{% if transaction_pages > 1 %}<div class="transaction-pagination"><span class="muted">Page {{ transaction_page }} of {{ transaction_pages }} · {{ transaction_count }} transactions</span><div>{% if previous_page_url %}<a class="button secondary" href="{{ previous_page_url }}">Previous</a>{% endif %}{% if next_page_url %}<a class="button secondary" href="{{ next_page_url }}">Next</a>{% endif %}</div></div>{% endif %}
+
+<details><summary>Statement totals for the selected range</summary>
+<section class="validator-totals" aria-label="Statement totals">
+{% for total in summaries %}
+  <article class="card validator-total-card">
+    <h2>{{ total.currency }} · selected range</h2>
+    {% if total.account_balance is not none %}<div class="label">Statement balance · {{ snapshot.account_name }} · {{ european_date(snapshot.as_of_date) }}</div><div class="validator-net">{{ european_amount(total.account_balance) }} {{ total.currency }}</div><p class="muted">Net movement in range: {{ european_amount(total.incoming) }} in − {{ european_amount(total.outgoing) }} out</p><div class="projected-total"><strong>Expected after approved payments</strong><span>{{ european_amount(total.projected_balance) }} {{ total.currency }}</span><small>{{ european_amount(total.approved) }} {{ total.currency }} approved, not yet sent</small></div>
+    {% else %}<div class="label">Net movement in selected range</div><div class="validator-net">{{ european_amount(total.current_net) }} {{ total.currency }}</div><p class="muted">{{ european_amount(total.incoming) }} in − {{ european_amount(total.outgoing) }} out</p><div class="projected-total"><strong>Net after approved payments</strong><span>{{ european_amount(total.projected_net) }} {{ total.currency }}</span><small>{{ european_amount(total.approved) }} {{ total.currency }} approved, not yet sent</small></div>{% endif %}
+  </article>
+{% else %}<article class="card muted">No statement activity or approved payments in this range.</article>{% endfor %}
+</section>
+</details>
+<section class="validator-ledger-columns">
+  <article class="card"><h2>Money out</h2><div class="ledger-totals">{% for total in summaries %}<span>− {{ european_amount(total.outgoing) }} {{ total.currency }}</span>{% endfor %}</div>
+    {% if outgoing %}<div class="ledger-list">{% for item in outgoing %}<div class="ledger-row"><time>{{ european_date(item.txn_date) }}</time><span>{{ item.counterparty or item.description }}{% if item.counterparty and item.description != item.counterparty %}<small>{{ item.description }}</small>{% endif %}</span><strong>− {{ european_amount(item.display_amount) }} {{ item.currency }}</strong></div>{% endfor %}</div>
+    {% else %}<p class="muted">No outgoing items in this range.</p>{% endif %}
+  </article>
+  <article class="card"><h2>Money in</h2><div class="ledger-totals">{% for total in summaries %}<span>+ {{ european_amount(total.incoming) }} {{ total.currency }}</span>{% endfor %}</div>
+    {% if incoming %}<div class="ledger-list">{% for item in incoming %}<div class="ledger-row"><time>{{ european_date(item.txn_date) }}</time><span>{{ item.counterparty or item.description }}{% if item.counterparty and item.description != item.counterparty %}<small>{{ item.description }}</small>{% endif %}</span><strong>+ {{ european_amount(item.display_amount) }} {{ item.currency }}</strong></div>{% endfor %}</div>
+    {% else %}<p class="muted">No incoming items in this range.</p>{% endif %}
+  </article>
+</section>
+
+<section class="card projected-orders"><h2>Approved and issued payments</h2>
+  <p class="muted">These are bills ready for payment or awaiting bank confirmation whose planned or due date falls in the selected range. The forecast at the top includes the full pipeline, including future and undated bills.</p>
+  {% if approved_orders %}<div class="ledger-list">{% for item in approved_orders %}<div class="ledger-row"><time>{{ european_date(item.payment_date) or 'Date not set' }}</time><span>{{ item.supplier }} · {{ item.invoice_number }}</span><strong>{{ european_amount(item.remaining) }} {{ item.currency }}</strong></div>{% endfor %}</div>
+  {% else %}<p class="muted">No approved payments in this range.</p>{% endif %}
+</section>
+{% endblock %}
